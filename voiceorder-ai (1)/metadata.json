@@ -1,6 +1,0 @@
-{
-  "name": "VoiceOrder AI",
-  "description": "Voice-powered order entry system. Upload product and customer CSVs to start taking orders by voice.",
-  "requestFramePermissions": ["microphone"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
