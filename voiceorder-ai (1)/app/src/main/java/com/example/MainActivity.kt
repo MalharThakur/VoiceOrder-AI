@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -42,6 +43,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.*
 import com.example.ui.VoiceOrderViewModel
+import com.example.ui.LoginScreen
 import com.example.ui.VoiceOrderViewModel.ActiveOrderItem
 import java.text.SimpleDateFormat
 import java.util.*
@@ -89,196 +91,213 @@ fun CustomEmeraldTheme(content: @Composable () -> Unit) {
 @Composable
 fun MainAppScreen() {
     val viewModel: VoiceOrderViewModel = viewModel()
-    val context = LocalContext.current
+    val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
 
-    // Observe streams from ViewModel
-    val products by viewModel.products.collectAsStateWithLifecycle()
-    val customers by viewModel.customers.collectAsStateWithLifecycle()
-    val orders by viewModel.orders.collectAsStateWithLifecycle()
-    val isRecording by viewModel.isRecording.collectAsStateWithLifecycle()
-    val isProcessing by viewModel.isProcessing.collectAsStateWithLifecycle()
-    val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
-    val detectedOrder by viewModel.detectedOrder.collectAsStateWithLifecycle()
+    if (!isLoggedIn) {
+        LoginScreen(viewModel = viewModel)
+    } else {
+        val context = LocalContext.current
 
-    var activeTab by remember { mutableStateOf("voice") } // voice, catalogs, history
+        // Observe streams from ViewModel
+        val products by viewModel.products.collectAsStateWithLifecycle()
+        val customers by viewModel.customers.collectAsStateWithLifecycle()
+        val orders by viewModel.orders.collectAsStateWithLifecycle()
+        val isRecording by viewModel.isRecording.collectAsStateWithLifecycle()
+        val isProcessing by viewModel.isProcessing.collectAsStateWithLifecycle()
+        val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
+        val detectedOrder by viewModel.detectedOrder.collectAsStateWithLifecycle()
 
-    // Runtime Permission Launcher
-    var showPermissionAlert by remember { mutableStateOf(false) }
-    val recordAudioPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-        onResult = { isGranted ->
-            if (isGranted) {
-                viewModel.startRecording()
-            } else {
-                showPermissionAlert = true
-            }
-        }
-    )
+        var activeTab by remember { mutableStateOf("voice") } // voice, catalogs, history
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .background(EmeraldPrimary, RoundedCornerShape(8.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "Logo Mic",
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Text(
-                            text = "VoiceOrder AI",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp,
-                            color = DarkZinc
-                        )
-                    }
-                },
-                actions = {
-                    Row(
-                        modifier = Modifier.padding(end = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Badge(containerColor = Color(0xFFE4E4E7)) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(Icons.Default.Build, "Pkg Icon", modifier = Modifier.size(12.dp), tint = Color(0xFF71717A))
-                                Text("${products.size} Products", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF52525B))
-                            }
-                        }
-                        Badge(containerColor = Color(0xFFE4E4E7)) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(Icons.Default.Person, "User Icon", modifier = Modifier.size(12.dp), tint = Color(0xFF71717A))
-                                Text("${customers.size} Customers", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF52525B))
-                            }
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
-            )
-        },
-        bottomBar = {
-            NavigationBar(containerColor = Color.White) {
-                NavigationBarItem(
-                    selected = activeTab == "voice",
-                    onClick = { activeTab = "voice" },
-                    icon = { Icon(Icons.Default.PlayArrow, "Active Tab") },
-                    label = { Text("Voice Entry") },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = EmeraldPrimary,
-                        selectedTextColor = EmeraldPrimary,
-                        indicatorColor = EmeraldContainer
-                    )
-                )
-                NavigationBarItem(
-                    selected = activeTab == "catalogs",
-                    onClick = { activeTab = "catalogs" },
-                    icon = { Icon(Icons.Default.List, "Catalog Tab") },
-                    label = { Text("Catalog Files") },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = EmeraldPrimary,
-                        selectedTextColor = EmeraldPrimary,
-                        indicatorColor = EmeraldContainer
-                    )
-                )
-                NavigationBarItem(
-                    selected = activeTab == "history",
-                    onClick = { activeTab = "history" },
-                    icon = { Icon(Icons.Default.ShoppingCart, "History Tab") },
-                    label = { Text("App Orders") },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = EmeraldPrimary,
-                        selectedTextColor = EmeraldPrimary,
-                        indicatorColor = EmeraldContainer
-                    )
-                )
-            }
-        }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .background(LightZincBg)
-        ) {
-            // Main views according to active tab
-            when (activeTab) {
-                "voice" -> VoiceTabScreen(
-                    viewModel = viewModel,
-                    products = products,
-                    customers = customers,
-                    isRecording = isRecording,
-                    isProcessing = isProcessing,
-                    errorMessage = errorMessage,
-                    onRequestPermission = {
-                        val permissionCheck = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
-                        if (permissionCheck == PackageManager.PERMISSION_GRANTED) {
-                            viewModel.startRecording()
-                        } else {
-                            recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                        }
-                    }
-                )
-                "catalogs" -> CatalogsTabScreen(
-                    viewModel = viewModel,
-                    products = products,
-                    customers = customers
-                )
-                "history" -> HistoryTabScreen(
-                    viewModel = viewModel,
-                    orders = orders
-                )
-            }
-
-            // Confirmed Order Overlay modal if detected
-            detectedOrder?.let { activeOrder ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color(0x80000000))
-                        .clickable(enabled = false) {}, // Intercept taps
-                    contentAlignment = Alignment.Center
-                ) {
-                    DetectedOrderConfirmationCard(
-                        activeOrder = activeOrder,
-                        products = products,
-                        customers = customers,
-                        viewModel = viewModel
-                    )
-                }
-            }
-        }
-    }
-
-    if (showPermissionAlert) {
-        AlertDialog(
-            onDismissRequest = { showPermissionAlert = false },
-            title = { Text("Microphone Permission Required") },
-            text = { Text("This application converts your orders from your spoken voice. It requires audio permissions to record your input.") },
-            confirmButton = {
-                TextButton(onClick = { showPermissionAlert = false }) {
-                    Text("OK", color = EmeraldPrimary)
+        // Runtime Permission Launcher
+        var showPermissionAlert by remember { mutableStateOf(false) }
+        val recordAudioPermissionLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission(),
+            onResult = { isGranted ->
+                if (isGranted) {
+                    viewModel.startRecording()
+                } else {
+                    showPermissionAlert = true
                 }
             }
         )
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(EmeraldPrimary, RoundedCornerShape(8.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Logo Mic",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Text(
+                                text = "VoiceOrder AI",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp,
+                                color = DarkZinc
+                            )
+                        }
+                    },
+                    actions = {
+                        Row(
+                            modifier = Modifier.padding(end = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Badge(containerColor = Color(0xFFE4E4E7)) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(Icons.Default.Build, "Pkg Icon", modifier = Modifier.size(12.dp), tint = Color(0xFF71717A))
+                                    Text("${products.size} Products", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF52525B))
+                                }
+                            }
+                            Badge(containerColor = Color(0xFFE4E4E7)) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(Icons.Default.Person, "User Icon", modifier = Modifier.size(12.dp), tint = Color(0xFF71717A))
+                                    Text("${customers.size} Customers", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF52525B))
+                                }
+                            }
+                            // Logout action icon
+                            IconButton(
+                                onClick = { viewModel.logout() },
+                                modifier = Modifier.size(36.dp).testTag("logout_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ExitToApp,
+                                    contentDescription = "Sign Out",
+                                    tint = Color(0xFFEF4444)
+                                )
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+                )
+            },
+            bottomBar = {
+                NavigationBar(containerColor = Color.White) {
+                    NavigationBarItem(
+                        selected = activeTab == "voice",
+                        onClick = { activeTab = "voice" },
+                        icon = { Icon(Icons.Default.PlayArrow, "Active Tab") },
+                        label = { Text("Voice Entry") },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = EmeraldPrimary,
+                            selectedTextColor = EmeraldPrimary,
+                            indicatorColor = EmeraldContainer
+                        )
+                    )
+                    NavigationBarItem(
+                        selected = activeTab == "catalogs",
+                        onClick = { activeTab = "catalogs" },
+                        icon = { Icon(Icons.Default.List, "Catalog Tab") },
+                        label = { Text("Catalog Files") },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = EmeraldPrimary,
+                            selectedTextColor = EmeraldPrimary,
+                            indicatorColor = EmeraldContainer
+                        )
+                    )
+                    NavigationBarItem(
+                        selected = activeTab == "history",
+                        onClick = { activeTab = "history" },
+                        icon = { Icon(Icons.Default.ShoppingCart, "History Tab") },
+                        label = { Text("App Orders") },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = EmeraldPrimary,
+                            selectedTextColor = EmeraldPrimary,
+                            indicatorColor = EmeraldContainer
+                        )
+                    )
+                }
+            }
+        ) { innerPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .background(LightZincBg)
+            ) {
+                // Main views according to active tab
+                when (activeTab) {
+                    "voice" -> VoiceTabScreen(
+                        viewModel = viewModel,
+                        products = products,
+                        customers = customers,
+                        isRecording = isRecording,
+                        isProcessing = isProcessing,
+                        errorMessage = errorMessage,
+                        onRequestPermission = {
+                            val permissionCheck = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+                            if (permissionCheck == PackageManager.PERMISSION_GRANTED) {
+                                viewModel.startRecording()
+                            } else {
+                                recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            }
+                        }
+                    )
+                    "catalogs" -> CatalogsTabScreen(
+                        viewModel = viewModel,
+                        products = products,
+                        customers = customers
+                    )
+                    "history" -> HistoryTabScreen(
+                        viewModel = viewModel,
+                        orders = orders
+                    )
+                }
+
+                // Confirmed Order Overlay modal if detected
+                detectedOrder?.let { activeOrder ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color(0x80000000))
+                            .clickable(enabled = false) {}, // Intercept taps
+                        contentAlignment = Alignment.Center
+                    ) {
+                        DetectedOrderConfirmationCard(
+                            activeOrder = activeOrder,
+                            products = products,
+                            customers = customers,
+                            viewModel = viewModel
+                        )
+                    }
+                }
+            }
+        }
+
+        if (showPermissionAlert) {
+            AlertDialog(
+                onDismissRequest = { showPermissionAlert = false },
+                title = { Text("Microphone Permission Required") },
+                text = { Text("This application converts your orders from your spoken voice. It requires audio permissions to record your input.") },
+                confirmButton = {
+                    TextButton(onClick = { showPermissionAlert = false }) {
+                        Text("OK", color = EmeraldPrimary)
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -788,7 +807,7 @@ fun CatalogsTabScreen(
                     text = if (activeCsvMode == "products") {
                         "Paste a comma-separated row text. Headers: ProductCode,ProductName,price"
                     } else {
-                        "Paste a comma-separated row text. Headers: StockiestCode,StockiestName,email,phone"
+                        "Paste a comma-separated row text. Headers: CustomerCode,CustomerName"
                     },
                     fontSize = 11.sp,
                     color = Color(0xFF71717A)
@@ -821,7 +840,7 @@ fun CatalogsTabScreen(
                             text = if (activeCsvMode == "products") {
                                 "💡 Paste product CSV text here...\n\nExample:\nProductCode,ProductName,price\nCOF-10,Premium Bean Coffee,8.45"
                             } else {
-                                "💡 Paste customer CSV text here...\n\nExample:\nStockiestCode,StockiestName,email,phone\nC-105,Sarah Conner,sarah@test.com,555-0909"
+                                "💡 Paste customer CSV text here...\n\nExample:\nCustomerCode,CustomerName\nC-105,Sarah Conner"
                             },
                             color = Color.Gray.copy(alpha = 0.5f),
                             fontSize = 11.sp
@@ -853,7 +872,7 @@ fun CatalogsTabScreen(
                             if (activeCsvMode == "products") {
                                 rawProductsText = "ProductCode,ProductName,price\nCHZ-99,Gouda Cheese Wheels,12.50\nTEA-40,English Earl Grey Tea,4.10"
                             } else {
-                                rawCustomersText = "StockiestCode,StockiestName,email,phone\nC-201,John Connor,john@connor.com,555-1212"
+                                rawCustomersText = "CustomerCode,CustomerName\nC-201,John Connor"
                             }
                         }
                     ) {
@@ -952,7 +971,7 @@ fun CatalogsTabScreen(
                             Text("${products.size}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = DarkZinc)
                             Spacer(modifier = Modifier.height(4.dp))
                             products.take(3).forEach {
-                                Text("• ${it.name} ($${it.price})", fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("• ${it.name} (₹${it.price})", fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
                     }
@@ -1112,7 +1131,7 @@ fun HistoryTabScreen(
                             }
 
                             Text(
-                                text = "$${String.format(Locale.US, "%.2f", order.total_amount)}",
+                                text = "₹${String.format(Locale.US, "%.2f", order.total_amount)}",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 18.sp,
                                 color = EmeraldPrimary
@@ -1378,7 +1397,7 @@ fun DetectedOrderConfirmationCard(
                                     ) {
                                         products.forEach { p ->
                                             DropdownMenuItem(
-                                                text = { Text("${p.name} ($${p.price})") },
+                                                text = { Text("${p.name} (₹${p.price})") },
                                                 onClick = {
                                                     viewModel.updateDetectedItemProduct(idx, p)
                                                     itemProductExpanded = false
@@ -1479,7 +1498,7 @@ fun DetectedOrderConfirmationCard(
                                 horizontalArrangement = Arrangement.End
                             ) {
                                 Text(
-                                    text = "$${String.format(Locale.US, "%.2f", item.product.price)} x ${item.quantity} = $${String.format(Locale.US, "%.2f", item.product.price * item.quantity)}",
+                                    text = "₹${String.format(Locale.US, "%.2f", item.product.price)} x ${item.quantity} = ₹${String.format(Locale.US, "%.2f", item.product.price * item.quantity)}",
                                     fontSize = 11.sp,
                                     color = Color(0xFF71717A),
                                     fontWeight = FontWeight.Medium

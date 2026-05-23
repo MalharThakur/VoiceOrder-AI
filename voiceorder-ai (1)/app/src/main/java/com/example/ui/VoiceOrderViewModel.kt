@@ -16,6 +16,44 @@ class VoiceOrderViewModel(application: Application) : AndroidViewModel(applicati
     private val db = AppDatabase.getDatabase(application)
     private val repository = VoiceOrderRepository(db)
     private val geminiService = GeminiService()
+    private val authService = AuthService()
+    private val sharedPrefs = application.getSharedPreferences("voice_order_prefs", android.content.Context.MODE_PRIVATE)
+
+    // User authentication session states
+    private val _isLoggedIn = MutableStateFlow(sharedPrefs.getString("auth_token", null) != null)
+    val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
+
+    private val _isAuthenticating = MutableStateFlow(false)
+    val isAuthenticating: StateFlow<Boolean> = _isAuthenticating.asStateFlow()
+
+    private val _loginError = MutableStateFlow<String?>(null)
+    val loginError: StateFlow<String?> = _loginError.asStateFlow()
+
+    fun loginWithUsername(username: String, password: String) {
+        viewModelScope.launch {
+            _isAuthenticating.value = true
+            _loginError.value = null
+            val result = authService.login(username, password)
+            if (result.isSuccess) {
+                val token = result.getOrThrow()
+                sharedPrefs.edit().putString("auth_token", token).apply()
+                _isLoggedIn.value = true
+            } else {
+                _loginError.value = result.exceptionOrNull()?.message ?: "Invalid username or password."
+            }
+            _isAuthenticating.value = false
+        }
+    }
+
+    fun logout() {
+        sharedPrefs.edit().remove("auth_token").apply()
+        _isLoggedIn.value = false
+        _loginError.value = null
+    }
+
+    fun clearLoginError() {
+        _loginError.value = null
+    }
 
     // Database flow streams
     val products: StateFlow<List<Product>> = repository.allProducts
@@ -101,34 +139,54 @@ class VoiceOrderViewModel(application: Application) : AndroidViewModel(applicati
     fun stopRecordingAndProcess() {
         _isRecording.value = false
         try {
-            mediaRecorder?.apply {
-                stop()
-                release()
+            mediaRecorder?.let { recorder ->
+                try {
+                    recorder.stop()
+                } catch (stopEx: Exception) {
+                    Log.e("VoiceOrderViewModel", "MediaRecorder stop failed, releasing", stopEx)
+                } finally {
+                    try {
+                        recorder.release()
+                    } catch (releaseEx: Exception) {
+                        Log.e("VoiceOrderViewModel", "MediaRecorder release failed", releaseEx)
+                    }
+                }
             }
+        } finally {
             mediaRecorder = null
-            
+        }
+
+        try {
             val file = audioFile
             if (file != null && file.exists()) {
                 processVoiceFile(file)
             }
         } catch (e: Exception) {
-            _errorMessage.value = "Failed to stop recording: ${e.message}"
-            Log.e("VoiceOrderViewModel", "Error stopping MediaRecorder", e)
+            _errorMessage.value = "Failed to process voice file: ${e.message}"
+            Log.e("VoiceOrderViewModel", "Error processing Voice File", e)
         }
     }
 
     fun cancelRecording() {
         _isRecording.value = false
         try {
-            mediaRecorder?.apply {
-                stop()
-                release()
+            mediaRecorder?.let { recorder ->
+                try {
+                    recorder.stop()
+                } catch (stopEx: Exception) {
+                    Log.e("VoiceOrderViewModel", "MediaRecorder stop failed during cancel, releasing", stopEx)
+                } finally {
+                    try {
+                        recorder.release()
+                    } catch (releaseEx: Exception) {
+                        Log.e("VoiceOrderViewModel", "MediaRecorder release failed during cancel", releaseEx)
+                    }
+                }
             }
+        } finally {
             mediaRecorder = null
             audioFile?.delete()
             audioFile = null
-        } catch (e: Exception) {
-            Log.e("VoiceOrderViewModel", "Error canceling recording", e)
         }
     }
 
@@ -451,11 +509,20 @@ class VoiceOrderViewModel(application: Application) : AndroidViewModel(applicati
                 _errorMessage.value = "Product CSV input is empty! Please verify the format."
                 return@launch
             }
+            
+            // Safety check: Prevent importing a Customer CSV into Products
+            val firstRecord = records.first()
+            val keysLower = firstRecord.keys.map { it.lowercase().trim() }
+            if (keysLower.any { it.contains("customer") || it.contains("stockiest") || it == "customercode" || it == "customername" || it == "stockiestcode" || it == "stockiestname" }) {
+                _errorMessage.value = "Import rejected: This file appears to contain Customer headers. Please upload it under the Customers tab."
+                return@launch
+            }
+
             val productsList = records.mapNotNull { record ->
                 val name = CsvParser.getRecordValue(record, listOf("ProductName", "name", "product_name", "product", "item", "item_name", "ProductName ", "Product Name"))
                 val sku = CsvParser.getRecordValue(record, listOf("ProductCode", "sku", "code", "ProductCode ", "Product Code", "Product ID", "id"))
                 val priceStr = CsvParser.getRecordValue(record, listOf("price", "Price", "Rate", "cost", "Price ")) ?: "0"
-                val cleanedPriceStr = priceStr.replace("$", "").trim()
+                val cleanedPriceStr = priceStr.replace("$", "").replace("₹", "").trim()
                 val price = cleanedPriceStr.toDoubleOrNull() ?: 0.0
                 if (!name.isNullOrBlank()) {
                     Product(name = name.trim(), price = price, sku = sku?.trim() ?: "")
@@ -482,16 +549,24 @@ class VoiceOrderViewModel(application: Application) : AndroidViewModel(applicati
                 _errorMessage.value = "Customer CSV input is empty! Please verify the format."
                 return@launch
             }
+
+            // Safety check: Prevent importing a Product CSV into Customers
+            val firstRecord = records.first()
+            val keysLower = firstRecord.keys.map { it.lowercase().trim() }
+            if (keysLower.any { it.contains("product") || it == "sku" || it == "price" || it == "rate" || it == "cost" }) {
+                _errorMessage.value = "Import rejected: This file appears to contain Product headers. Please upload it under the Products tab."
+                return@launch
+            }
+
             val customersList = records.mapNotNull { record ->
-                val name = CsvParser.getRecordValue(record, listOf("StockiestName", "name", "CustomerName", "Customer", "Client", "ClientName", "Customer Name", "Client Name"))
-                val code = CsvParser.getRecordValue(record, listOf("StockiestCode", "code", "CustomerCode", "Customer Code", "Customer ID", "ID", "CustomerID", "ClientCode", "Client Code"))
-                val email = CsvParser.getRecordValue(record, listOf("email", "Email", "mail", "E-mail"))
-                val phone = CsvParser.getRecordValue(record, listOf("phone", "Phone", "Contact", "phone_number", "Mobile", "mobile"))
+                // Restrict purely to customer code and customername mapping
+                val name = CsvParser.getRecordValue(record, listOf("customername", "customer name", "name", "customer_name", "StockiestName"))
+                val code = CsvParser.getRecordValue(record, listOf("customercode", "customer code", "code", "customer_code", "StockiestCode"))
                 if (!name.isNullOrBlank()) {
                     Customer(
                         name = name.trim(),
-                        email = email?.trim() ?: "",
-                        phone = phone?.trim() ?: "",
+                        email = "", // Restricted to customer code and name only
+                        phone = "", // Restricted to customer code and name only
                         code = code?.trim() ?: ""
                     )
                 } else null
@@ -500,7 +575,7 @@ class VoiceOrderViewModel(application: Application) : AndroidViewModel(applicati
                 repository.insertCustomerBulk(customersList)
                 _successMessage.value = "Successfully imported ${customersList.size} customer accounts!"
             } else {
-                _errorMessage.value = "Failed to parse any customers. Check header names: name/StockiestName/CustomerName, code/StockiestCode!"
+                _errorMessage.value = "Failed to parse any customers. Check header names: customername/StockiestName, customercode/StockiestCode!"
             }
         } catch (e: Exception) {
             _errorMessage.value = "Failed to parse Customers CSV: ${e.message}"
