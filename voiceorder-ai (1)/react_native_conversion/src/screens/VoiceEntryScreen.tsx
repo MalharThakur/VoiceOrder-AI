@@ -89,7 +89,7 @@ export const VoiceEntryScreen: React.FC<VoiceScreenProps> = ({
       // Convert audio file to Base64 String
       setStatusText('Reading audio content...');
       const base64Audio = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
+        encoding: "base64",
       });
 
       // Transcribe via Gemini
@@ -203,7 +203,7 @@ export const VoiceEntryScreen: React.FC<VoiceScreenProps> = ({
         const contains = products.find(p => {
           const pLower = p.name.toLowerCase();
           return pLower.includes(target) || target.includes(pLower) ||
-                 pLower.includes(targetNormalized) || targetNormalized.contains(pLower);
+                 pLower.includes(targetNormalized) || targetNormalized.includes(pLower);
         });
         if (contains) return contains;
 
