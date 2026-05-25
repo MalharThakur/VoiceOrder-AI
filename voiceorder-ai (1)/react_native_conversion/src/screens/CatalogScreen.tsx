@@ -141,7 +141,7 @@ export const CatalogScreen: React.FC<CatalogProps> = ({
 
         if (list.length > 0) {
           await database.insertProductsBulk(list);
-          setBanners(`Successfully imported ${list.size || list.length} product catalog items!`);
+          setBanners(`Successfully imported ${list.length} product catalog items!`);
           setInputText('');
           onRefresh();
         } else {
